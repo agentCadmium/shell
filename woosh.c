@@ -9,11 +9,12 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #define MAX_ARGS 10
 #define LINE_LENGTH 128
 
-int status;
-char* path = "/bin/";
+//int status;
+char* path[100];
 
 
 
@@ -25,9 +26,6 @@ void reportError() {
 int readLine(char* args[], char line[]){
 	char* ret = fgets(line, LINE_LENGTH, stdin);
 
-	if(strcmp(line, "exitn\n")==0 || ret == NULL){
-		status = 0;
-	}
 	int i =0;
 	while (line[i]!='\n'){
 		i++;
@@ -47,12 +45,12 @@ int readLine(char* args[], char line[]){
 	return 1;
 }
 
-//copied from stack overflow, for now
-char* concat(const char *s1, const char *s2)
-{
-    char *result = malloc(strlen(s1)+strlen(s2)+1);//+1 for the null-terminator
+char* concat(char *s1, char *s2){
+    char *result = realloc(s1, (strlen(s1)+strlen(s2)+strlen("/")+1));//+1 for the null-terminator
+    //and for the extra slash between the path and the command 
     //in real code you would check for errors in malloc here
     strcpy(result, s1);
+    strcat(result, "/");
     strcat(result, s2);
     return result;
 }
@@ -62,7 +60,6 @@ void built_in_exit(){
 }
 
 void cd(char* args[]) {
-    printf("in cd");
     if(args[1] == NULL) {
           char *home = getenv("HOME");
           int ret = chdir(home);
@@ -91,21 +88,66 @@ void pwd() {
   }
 }
 
-// void setPath(char *newpath) {
-//   if(newpath == NULL) {
+void setPath(char * args[]) {
+
+
+  // if(args[1] == NULL) {
     
-//   } else {
-//     path = realloc(5*sizeof(char));
-//   }
-// }
+  // } else {
+  	int j= 0;
+	while (path[j]!=NULL){
+		path[j] = realloc(path[j], 2*sizeof(char*));
+		strcpy(path[j], "");
+		j++;
+	}
 
-// void printPath() {
+  	int i=0;
+     while(args[i+1]!=NULL){
+     	path[i] = realloc(path[i], (strlen(args[i+1])+1)*sizeof(char*));
+     	strcpy(path[i], args[i+1]);
+		//printf("Whats in path[i] in setPath %s\n",path[i]);
+		
+		i++;
+	}
+  // }
+}
 
-//   printf("%s\n", PATH);
-// }
+void printPath() {
+  int i=0;
+  //printf("Whats in path[0]%s\n",path[0]);
+  while (path[i]!='\0'){
+  	printf("%s ", path[i]);
+  	i++;
+  }
+  printf("\n");
+}
+
+int fileExists(const char* file) {
+	//printf("in file exists");
+    struct stat buf;
+    if (stat(file, &buf) == 0){
+    	return 1;
+    }
+    else return 0;
+}
+
+char* searchPath(char* args[], char* path[]){
+	int i=0;
+	while (path[i]!=NULL){
+		//printf("Whats in path[0] from searchpath%s\n",path[0]);
+		char* res = concat(path[i], args[0]);
+		//printf("Whats is res from searchpath%s\n",res);
+		if (fileExists(res)){
+			return res;
+		}
+		i++;
+	}
+	return NULL;
+}
+
 
 int parse(char* args[]) {
-	if (strcmp(args[0], "exitn")==0){
+	if (strcmp(args[0], "exit")==0){
 		built_in_exit();
 		return 0;
 	}
@@ -117,12 +159,17 @@ int parse(char* args[]) {
 		pwd(args);
 		return 0;
 	}
-	// else if(strcmp(args[0], "setpath")==0){
-	// 	setpath(args[1]);
-	// 	return 0;
-	// }
-
+	else if(strcmp(args[0], "setpath")==0){
+		setPath(args);
+		return 0;
+	}
+	else if(strcmp(args[0], "printpath")==0){
+		printPath();
+		return 0;
+	}
+	return 1;
 }
+
 
 int main(int argc, char **argv)
 {
@@ -131,29 +178,32 @@ int main(int argc, char **argv)
   		reportError();
   		exit(1);
  	}
-  	status =1;
+  	//status =1;
   	//store and read the line
   	char* args[MAX_ARGS];
   	char line[LINE_LENGTH];
-  	char path[] = "/bin/";
-
-  	while (status){
+  	
+  	path[0] = (char*)malloc(4 * sizeof(char));
+  	strcpy(path[0], "/bin");
+  	
+  	char* newPath;
+  	while (1){
   		printf("woosh> ");
   		readLine(args, line);
-
-  		char* newPath = concat(path, args[0]);
+  		//char* newPath = concat(path[0], args[0]);
 
   		int ret = parse(args);
-  		if (ret ==0){
+  		if (ret == 0){
   			//do nothing;
   		}
   		else{
+  			//printf("Went into here" );
 	  		//for executable programs
 			//modified wait.c which was shown in class
 			pid_t pid;
 			pid = fork();
 			if (pid < 0) {
-		  		fprintf(stderr,"Error: can't fork a process\n");
+		  		//reportError();
 		  		perror("fork()");
 		  		exit(1);
 			} 
@@ -165,11 +215,27 @@ int main(int argc, char **argv)
 		  		}
 			}
 			else {
-			
-				execv(newPath, args);
+				if (searchPath(args, path)!=NULL){
+
+  					newPath = searchPath(args, path);
+  					execv(newPath, args);
+  					free(newPath);
+  				}
+	  			else{
+	  				reportError();
+	  				printf("this fucks it up" );
+	  			}
 			}
-			free(newPath);
+			
 		}
+
+		
+  	}
+  	int i=0;
+  	//printf("Whats in path[0]%s\n",path[0]);
+  	while (path[i]!=NULL){
+  		free(path[i]);
+  		i++;
   	}
 
 }
