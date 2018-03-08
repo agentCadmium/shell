@@ -12,6 +12,9 @@
 #define MAX_ARGS 10
 #define LINE_LENGTH 128
 
+int status;
+char* path = "/bin/";
+
 
 
 void reportError() {
@@ -19,22 +22,19 @@ void reportError() {
   write(STDERR_FILENO, error_message, strlen(error_message));
 }
 
-void readLine(char line[]){
+int readLine(char* args[], char line[]){
 	char* ret = fgets(line, LINE_LENGTH, stdin);
 
-	if(strcmp(line, "exit\n")==0 || ret == NULL){
-		exit(0);
+	if(strcmp(line, "exitn\n")==0 || ret == NULL){
+		status = 0;
 	}
 	int i =0;
 	while (line[i]!='\n'){
 		i++;
 	}
 	line[i] = '\0';
-}
 
-
-int parseLine(char* args[], char line[]){
-	int i =0;
+	i = 0;
 	args[i] = strtok(line, " ");
 	if (args[i] == NULL){
 		return 1;
@@ -57,54 +57,119 @@ char* concat(const char *s1, const char *s2)
     return result;
 }
 
+void built_in_exit(){
+	exit(0);
+}
+
+void cd(char* args[]) {
+    printf("in cd");
+    if(args[1] == NULL) {
+          char *home = getenv("HOME");
+          int ret = chdir(home);
+        if(ret != 0){
+            reportError();
+        }
+    }
+    else{
+        //printf("%s\n", line[1] );
+        int ret = chdir(args[1]);
+
+      if(ret != 0){
+            reportError();
+        }
+    }
+}
+
+void pwd() {
+    //printf("in pwd");
+  char *pathName = getcwd(NULL, 0);
+  if(pathName != NULL){
+      printf("%s\n", pathName);
+  }
+  else {
+      reportError();
+  }
+}
+
+// void setPath(char *newpath) {
+//   if(newpath == NULL) {
+    
+//   } else {
+//     path = realloc(5*sizeof(char));
+//   }
+// }
+
+// void printPath() {
+
+//   printf("%s\n", PATH);
+// }
+
+int parse(char* args[]) {
+	if (strcmp(args[0], "exitn")==0){
+		built_in_exit();
+		return 0;
+	}
+	else if (strcmp(args[0], "cd")==0){
+		cd(args);
+		return 0;
+	}
+	else if(strcmp(args[0], "pwd")==0){
+		pwd(args);
+		return 0;
+	}
+	// else if(strcmp(args[0], "setpath")==0){
+	// 	setpath(args[1]);
+	// 	return 0;
+	// }
+
+}
 
 int main(int argc, char **argv)
 {
-    int start = 1; 
     //if start of program, no additional arguments
-    if (argc>1 && start){
+    if (argc>1){
   		reportError();
   		exit(1);
  	}
-  
+  	status =1;
   	//store and read the line
   	char* args[MAX_ARGS];
   	char line[LINE_LENGTH];
-  
-
   	char path[] = "/bin/";
 
-  	pid_t pid = fork();
-  	pid_t wpid;
-
-  	while (1){
+  	while (status){
   		printf("woosh> ");
-  		readLine(line);
-  		parseLine(args, line);
+  		readLine(args, line);
 
   		char* newPath = concat(path, args[0]);
 
-		//modified wait.c which was shown in class
-		pid_t pid;
-		pid = fork();
-		if (pid < 0) {
-	  		fprintf(stderr,"Error: can't fork a process\n");
-	  		perror("fork()");
-	  		exit(1);
-		} 
-		else if (pid) { // I am the parent
-	  		int status;
-	  		// wait for the child
-	  		if (waitpid(pid,&status,0) == -1) {
-	    	perror("waitpid()");
-	  		}
+  		int ret = parse(args);
+  		if (ret ==0){
+  			//do nothing;
+  		}
+  		else{
+	  		//for executable programs
+			//modified wait.c which was shown in class
+			pid_t pid;
+			pid = fork();
+			if (pid < 0) {
+		  		fprintf(stderr,"Error: can't fork a process\n");
+		  		perror("fork()");
+		  		exit(1);
+			} 
+			else if (pid) { // I am the parent
+		  		int status;
+		  		// wait for the child
+		  		if (waitpid(pid,&status,0) == -1) {
+		    	perror("waitpid()");
+		  		}
+			}
+			else {
+			
+				execv(newPath, args);
+			}
+			free(newPath);
 		}
-		else {
-
-	  	//fprintf(stdout,"I am the child and my pid is %d\n",getpid());
-	  	execv(newPath, args);
-		}
-		free(newPath);
   	}
 
 }
