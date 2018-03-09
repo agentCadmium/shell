@@ -11,21 +11,40 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #define MAX_ARGS 10
-#define LINE_LENGTH 128
+#define LINE_LENGTH 200
 
-//int status;
+
 char* path[100];
 
+/**
+* Free memory allocated for path
+**/
+void freeMemory(){
+	int i=0;
+  	while (path[i]!=NULL){
+  		free(path[i]);
+  		i++;
+  	}
+}
 
-
+/**
+* Report error for unexpected bahavior
+**/
 void reportError() {
   char error_message[30] = "An error has occurred\n";
   write(STDERR_FILENO, error_message, strlen(error_message));
 }
 
+/**
+* Read in the line and store in an arguments array
+**/
 int readLine(char* args[], char line[]){
-	char* ret = fgets(line, LINE_LENGTH, stdin);
+	fgets(line, LINE_LENGTH, stdin);
 
+	//report error if line is greater than 128 bytes
+	if (strlen(line)>128){
+		return 2;
+	}
 	int i =0;
 	while (line[i]!='\n'){
 		i++;
@@ -45,20 +64,29 @@ int readLine(char* args[], char line[]){
 	return 1;
 }
 
-char* concat(const char *s1, const char *s2){
-    char *result = (char*)malloc((strlen(s1)+strlen(s2)+strlen("/")+1));//+1 for the null-terminator
-    //and for the extra slash between the path and the command 
-    //in real code you would check for errors in malloc here
+/**
+* Concatenate strings into a searchaeable path
+**/
+char* concat(char *s1, char *s2){
+    char *result = (char*)malloc((strlen(s1)+strlen(s2)+strlen("/")+1));
+    
     strcpy(result, s1);
     strcat(result, "/");
     strcat(result, s2);
     return result;
 }
 
+/**
+* Exit the program
+**/
 void built_in_exit(){
+	freeMemory();
 	exit(0);
 }
 
+/**
+* cd into a directory
+**/
 void cd(char* args[]) {
     if(args[1] == NULL) {
           char *home = getenv("HOME");
@@ -68,7 +96,6 @@ void cd(char* args[]) {
         }
     }
     else{
-        //printf("%s\n", line[1] );
         int ret = chdir(args[1]);
 
       if(ret != 0){
@@ -77,44 +104,47 @@ void cd(char* args[]) {
     }
 }
 
+/**
+* write full pathname
+**/
 void pwd() {
-    //printf("in pwd");
-  char *pathName = getcwd(NULL, 0);
-  if(pathName != NULL){
-      printf("%s\n", pathName);
+    
+  char *path = getcwd(NULL, 0);
+  if(path != NULL){
+      printf("%s\n", path);
   }
   else {
       reportError();
   }
 }
 
+/**
+* setpath
+**/
 void setPath(char * args[]) {
 
-
-  // if(args[1] == NULL) {
-    
-  // } else {
+	//reset the all the paths to null
   	int j= 0;
 	while (path[j]!=NULL){
-		path[j] = realloc(path[j], 2*sizeof(char*));
-		strcpy(path[j], "");
+		free(path[j]);
+		path[j]=NULL;
 		j++;
 	}
 
   	int i=0;
-     while(args[i+1]!=NULL){
-     	path[i] = realloc(path[i], (strlen(args[i+1])+1)*sizeof(char*));
+    while(args[i+1]!=NULL){
+     	path[i] = realloc(path[i], strlen(args[i+1])+1);
      	strcpy(path[i], args[i+1]);
-		//printf("Whats in path[i] in setPath %s\n",path[i]);
-		
 		i++;
 	}
-  // }
 }
 
+/**
+* print the current path
+**/
 void printPath() {
   int i=0;
-  //printf("Whats in path[0]%s\n",path[0]);
+
   while (path[i]!='\0'){
   	printf("%s ", path[i]);
   	i++;
@@ -122,8 +152,11 @@ void printPath() {
   printf("\n");
 }
 
+/**
+* check if a command exists in current path
+**/
 int fileExists(const char* file) {
-	//printf("in file exists");
+	
     struct stat buf;
     if (stat(file, &buf) == 0){
     	return 1;
@@ -131,21 +164,27 @@ int fileExists(const char* file) {
     else return 0;
 }
 
+
+/**
+* loop through all paths to see if command exists
+**/
 char* searchPath(char* args[], char* path[]){
 	int i=0;
+	char* res;
 	while (path[i]!=NULL){
-		//printf("Whats in path[0] from searchpath%s\n",path[0]);
-		char* res = concat(path[i], args[0]);
-		//printf("Whats is res from searchpath%s\n",res);
+		res = concat(path[i], args[0]);
 		if (fileExists(res)){
 			return res;
 		}
 		i++;
 	}
+	free(res);
 	return NULL;
 }
 
-
+/**
+* determine if command is built in
+**/
 int parse(char* args[]) {
 	if (strcmp(args[0], "exit")==0){
 		built_in_exit();
@@ -171,33 +210,38 @@ int parse(char* args[]) {
 }
 
 
+/**
+* Main
+**/
 int main(int argc, char **argv)
 {
     //if start of program, no additional arguments
     if (argc>1){
   		reportError();
+  		freeMemory();
   		exit(1);
  	}
-  	//status =1;
   	//store and read the line
   	char* args[MAX_ARGS];
   	char line[LINE_LENGTH];
   	
-  	path[0] = (char*)malloc(4 * sizeof(char));
+  	//set initial path as /bin
+  	path[0] = malloc((4+1)* sizeof(char));
   	strcpy(path[0], "/bin");
   	
+  	//path after setpath is called
   	char* newPath;
   	while (1){
   		printf("woosh> ");
-  		readLine(args, line);
-  		//char* newPath = concat(path[0], args[0]);
+  		int read = readLine(args, line);
+  		if(read == 2){
+  			reportError();
+  			continue;
+  		}
 
   		int ret = parse(args);
-  		if (ret == 0){
-  			//do nothing;
-  		}
-  		else{
-  			//printf("Went into here" );
+  		if (ret != 0){
+  			
 	  		//for executable programs
 			//modified wait.c which was shown in class
 			pid_t pid;
@@ -205,6 +249,7 @@ int main(int argc, char **argv)
 			if (pid < 0) {
 		  		//reportError();
 		  		perror("fork()");
+		  		freeMemory();
 		  		exit(1);
 			} 
 			else if (pid) { // I am the parent
@@ -215,27 +260,20 @@ int main(int argc, char **argv)
 		  		}
 			}
 			else {
-				if (searchPath(args, path)!=NULL){
-
-  					newPath = searchPath(args, path);
+  				newPath = searchPath(args, path);
+  				if (newPath!=NULL){
   					execv(newPath, args);
   					free(newPath);
   				}
 	  			else{
 	  				reportError();
+	  				continue;
 	  			}
 			}
 			
 		}
-
-		
   	}
-  	int i=0;
-  	//printf("Whats in path[0]%s\n",path[0]);
-  	while (path[i]!=NULL){
-  		free(path[i]);
-  		i++;
-  	}
+  	freeMemory();
 
 }
 
