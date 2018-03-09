@@ -45,8 +45,8 @@ int readLine(char* args[], char line[]){
 	return 1;
 }
 
-char* concat(char *s1, char *s2){
-    char *result = realloc(s1, (strlen(s1)+strlen(s2)+strlen("/")+1));//+1 for the null-terminator
+char* concat(const char *s1, const char *s2){
+    char *result = (char*)malloc((strlen(s1)+strlen(s2)+strlen("/")+1));//+1 for the null-terminator
     //and for the extra slash between the path and the command 
     //in real code you would check for errors in malloc here
     strcpy(result, s1);
@@ -223,7 +223,6 @@ int main(int argc, char **argv)
   				}
 	  			else{
 	  				reportError();
-	  				printf("this fucks it up" );
 	  			}
 			}
 			
